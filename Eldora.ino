@@ -10,6 +10,18 @@
 #include <LovyanGFX.hpp>
 #include "images_data.h"
 
+#ifndef ELDORA_FRAME_WIDTH
+#define ELDORA_FRAME_WIDTH 16
+#endif
+
+#ifndef ELDORA_FRAME_HEIGHT
+#define ELDORA_FRAME_HEIGHT 16
+#endif
+
+#define ELDORA_PRODUCT_NAME "ELDORA_CARE"
+#define ELDORA_BACKEND_URL "https://eldora-backend-production.up.railway.app"
+#define ELDORA_DEVICE_KEY "ELDORA-HUB-001"
+#define ELDORA_FIRMWARE_VERSION "0.4.1"
 
 struct EldoraConfig {
   const char* productName;
@@ -19,10 +31,10 @@ struct EldoraConfig {
 };
 
 const EldoraConfig CONFIG = {
-  "ELDORA_CARE",
-  "https://eldora-backend-production.up.railway.app",
-  "ELDORA-HUB-001",
-  "0.4.0",
+  ELDORA_PRODUCT_NAME,
+  ELDORA_BACKEND_URL,
+  ELDORA_DEVICE_KEY,
+  ELDORA_FIRMWARE_VERSION,
 };
 
 // TFT pins.
@@ -43,7 +55,7 @@ const EldoraConfig CONFIG = {
 #define PREF_NAMESPACE "eldora"
 #define PREF_WIFI_SSID "wifi_ssid"
 #define PREF_WIFI_PASS "wifi_pass"
-#define PREF_PAIR_TOKEN "pair_token"
+#define PREF_PAIRING_TOKEN "local_pairing_token"
 
 // Set this to an ADC pin after adding a voltage divider circuit.
 #define BATTERY_ADC_PIN -1
@@ -124,12 +136,23 @@ String generatePairingToken() {
   return String(token);
 }
 
+bool isTemplatePairingToken(const String& token) {
+  String normalized = token;
+  normalized.toLowerCase();
+  return normalized == "pair_token" ||
+         normalized == "pairing_token" ||
+         normalized == "template" ||
+         normalized == "changeme" ||
+         normalized == "change_me" ||
+         normalized == "your_token";
+}
+
 void loadPairingToken() {
-  localPairingToken = preferences.getString(PREF_PAIR_TOKEN, "");
-  if (localPairingToken.length() >= 8) return;
+  localPairingToken = preferences.getString(PREF_PAIRING_TOKEN, "");
+  if (localPairingToken.length() >= 16 && !isTemplatePairingToken(localPairingToken)) return;
 
   localPairingToken = generatePairingToken();
-  preferences.putString(PREF_PAIR_TOKEN, localPairingToken);
+  preferences.putString(PREF_PAIRING_TOKEN, localPairingToken);
   Serial.println("[PAIR] Local pairing token generated");
 }
 
