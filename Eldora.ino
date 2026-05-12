@@ -352,6 +352,7 @@ void handleProvisioningInfo() {
   doc["setupIp"] = "192.168.4.1";
   doc["hasWifi"] = hasWifiCredentials();
   doc["wifiSsid"] = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
+  if (WiFi.status() == WL_CONNECTED) doc["wifiRssi"] = WiFi.RSSI();
   doc["localIp"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "192.168.4.1";
   int batteryLevel = readBatteryLevel();
   if (batteryLevel >= 0) doc["batteryLevel"] = batteryLevel;
