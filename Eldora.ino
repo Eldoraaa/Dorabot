@@ -50,7 +50,7 @@ const EldoraConfig CONFIG = {
 
 // Timers.
 #define HEARTBEAT_INTERVAL_MS 30000UL
-#define COMMAND_POLL_INTERVAL_MS 15000UL
+#define COMMAND_POLL_INTERVAL_MS 3000UL
 #define DISPLAY_INTERVAL_MS 500UL
 #define WIFI_CONNECT_TIMEOUT_MS 20000UL
 
@@ -566,6 +566,35 @@ bool ackCommand(String commandId, const char* status, String message) {
   return code == 200;
 }
 
+void showCoreMessage(const String& title, const String& message) {
+  tft.fillScreen(lgfx::color565(234, 245, 251));
+  tft.setTextDatum(middle_center);
+  tft.setTextColor(lgfx::color565(31, 42, 55));
+  tft.setTextSize(2);
+  tft.drawString(title, 240, 110);
+  tft.setTextSize(1);
+  tft.setTextColor(lgfx::color565(92, 113, 132));
+  tft.drawString(message.substring(0, 42), 240, 165);
+  if (message.length() > 42) {
+    tft.drawString(message.substring(42, 84), 240, 190);
+  }
+  Serial.println("[VOICE] " + title + ": " + message);
+}
+
+void handleSpeakOnCore(JsonObject command) {
+  String commandId = command["id"] | "";
+  String message = command["payload"]["message"] | "Eldora is here. Are you feeling okay?";
+  if (message.length() == 0) message = "Eldora is here. Are you feeling okay?";
+  showCoreMessage("ELDORA CHECK-IN", message);
+  if (commandId.length() > 0) ackCommand(commandId, "applied", "Message displayed on Eldora Core");
+}
+
+void handleLocalAlarm(JsonObject command) {
+  String commandId = command["id"] | "";
+  showCoreMessage("ELDORA ALERT", "A caregiver alert has been triggered. Please stay calm.");
+  if (commandId.length() > 0) ackCommand(commandId, "applied", "Local alert displayed");
+}
+
 void handleConfigureWifi(JsonObject command) {
   String commandId = command["id"] | "";
   String nextSsid = command["payload"]["ssid"] | "";
@@ -619,6 +648,10 @@ void pollCommands() {
         String commandType = command["commandType"] | "";
         if (commandType == "configure_wifi") {
           handleConfigureWifi(command);
+        } else if (commandType == "speak_on_core") {
+          handleSpeakOnCore(command);
+        } else if (commandType == "activate_local_alarm") {
+          handleLocalAlarm(command);
         }
       }
     } else {
