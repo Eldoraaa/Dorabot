@@ -9,6 +9,8 @@
 #include <esp_system.h>
 #include <LovyanGFX.hpp>
 #include <driver/i2s.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "AudioFileSourceHTTPStream.h"
 #include "AudioFileSourcePROGMEM.h"
 #include "AudioFileSourceID3.h"
@@ -116,6 +118,9 @@ public:
 LGFX_ESP32S3 tft;
 Preferences preferences;
 WebServer provisioningServer(80);
+
+// --- MUTEX UNTUK MENGAMANKAN LAYAR ---
+SemaphoreHandle_t tftMutex;
 
 String activeWifiSsid;
 String activeWifiPass;
@@ -259,28 +264,32 @@ void renderDisplay() {
   lastState = currentState;
   lastRender = millis();
 
-  tft.fillScreen(lgfx::color565(234, 245, 251));
-  tft.fillCircle(240, 115, 52, stateColor());
-  tft.fillCircle(240, 115, 34, lgfx::color565(16, 24, 39));
-  drawFrameBitmap(currentFrame(), 192, 67, 6, TFT_WHITE);
+  // MENGAMANKAN AKSES LAYAR DENGAN MUTEX
+  if (xSemaphoreTake(tftMutex, portMAX_DELAY)) {
+    tft.fillScreen(lgfx::color565(234, 245, 251));
+    tft.fillCircle(240, 115, 52, stateColor());
+    tft.fillCircle(240, 115, 34, lgfx::color565(16, 24, 39));
+    drawFrameBitmap(currentFrame(), 192, 67, 6, TFT_WHITE);
 
-  tft.setTextDatum(middle_center);
-  tft.setTextColor(lgfx::color565(31, 42, 55));
-  tft.setTextSize(3);
-  tft.drawString("ELDORA", 240, 200);
+    tft.setTextDatum(middle_center);
+    tft.setTextColor(lgfx::color565(31, 42, 55));
+    tft.setTextSize(3);
+    tft.drawString("ELDORA", 240, 200);
 
-  tft.setTextColor(lgfx::color565(92, 113, 132));
-  tft.setTextSize(2);
-  tft.drawString(stateLabel(), 240, 242);
+    tft.setTextColor(lgfx::color565(92, 113, 132));
+    tft.setTextSize(2);
+    tft.drawString(stateLabel(), 240, 242);
 
-  tft.setTextSize(1);
-  if (currentState == PROVISIONING) {
-    tft.drawString(provisioningSsid(), 240, 278);
-    tft.drawString(String("Pass: ") + provisioningPassword(), 240, 302);
-    tft.drawString("Open 192.168.4.1", 240, 326);
-  } else {
-    tft.drawString(WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "No WiFi", 240, 280);
-    tft.drawString(String("Key: ") + String(CONFIG.deviceKey).substring(0, 8) + "...", 240, 305);
+    tft.setTextSize(1);
+    if (currentState == PROVISIONING) {
+      tft.drawString(provisioningSsid(), 240, 278);
+      tft.drawString(String("Pass: ") + provisioningPassword(), 240, 302);
+      tft.drawString("Open 192.168.4.1", 240, 326);
+    } else {
+      tft.drawString(WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "No WiFi", 240, 280);
+      tft.drawString(String("Key: ") + String(CONFIG.deviceKey).substring(0, 8) + "...", 240, 305);
+    }
+    xSemaphoreGive(tftMutex); // LEPASKAN KUNCI
   }
 }
 
@@ -783,16 +792,20 @@ bool ackCommand(String commandId, const char* status, String message) {
 }
 
 void showCoreMessage(const String& title, const String& message) {
-  tft.fillScreen(lgfx::color565(234, 245, 251));
-  tft.setTextDatum(middle_center);
-  tft.setTextColor(lgfx::color565(31, 42, 55));
-  tft.setTextSize(2);
-  tft.drawString(title, 240, 110);
-  tft.setTextSize(1);
-  tft.setTextColor(lgfx::color565(92, 113, 132));
-  tft.drawString(message.substring(0, 42), 240, 165);
-  if (message.length() > 42) {
-    tft.drawString(message.substring(42, 84), 240, 190);
+  // MENGAMANKAN AKSES LAYAR DENGAN MUTEX
+  if (xSemaphoreTake(tftMutex, portMAX_DELAY)) {
+    tft.fillScreen(lgfx::color565(234, 245, 251));
+    tft.setTextDatum(middle_center);
+    tft.setTextColor(lgfx::color565(31, 42, 55));
+    tft.setTextSize(2);
+    tft.drawString(title, 240, 110);
+    tft.setTextSize(1);
+    tft.setTextColor(lgfx::color565(92, 113, 132));
+    tft.drawString(message.substring(0, 42), 240, 165);
+    if (message.length() > 42) {
+      tft.drawString(message.substring(42, 84), 240, 190);
+    }
+    xSemaphoreGive(tftMutex); // LEPASKAN KUNCI
   }
   Serial.println("[VOICE] " + title + ": " + message);
 }
@@ -883,9 +896,13 @@ void setup() {
   delay(1200);
   Serial.printf("\n[SYS] --- %s ---\n", CONFIG.productName);
 
+  // INISIALISASI MUTEX SEBELUM INIT LAYAR
+  tftMutex = xSemaphoreCreateMutex();
+
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
   pinMode(VOICE_BUTTON_PIN, INPUT_PULLUP);
+  
   tft.init();
   tft.setRotation(3);
   tft.invertDisplay(true);
